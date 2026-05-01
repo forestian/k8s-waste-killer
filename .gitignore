@@ -1,0 +1,44 @@
+# Build output
+k8s-waste-killer
+k8s-waste-killer.exe
+*.exe
+*.out
+
+# Go module cache
+vendor/
+
+# Test cache / coverage
+*.test
+*.prof
+coverage.out
+
+# Kubernetes sensitive files
+kubeconfig
+kubeconfig.*
+*.kubeconfig
+.kube/
+
+# Secrets & credentials
+.env
+.env.*
+*.pem
+*.key
+*.cert
+*.crt
+secrets.yaml
+secret.yaml
+*-secret.yaml
+*-secret.json
+token
+token.*
+
+# Claude Code local settings
+.claude/
+
+# Editor / OS artifacts
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
