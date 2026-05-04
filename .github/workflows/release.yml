@@ -1,0 +1,149 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to build and upload assets to (e.g. v1.0.0)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+env:
+  BINARY_NAME: k8s-waste-killer
+
+jobs:
+  ci:
+    name: CI
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read Go version from go.mod
+        id: goversion
+        run: |
+          VER=$(grep '^go ' go.mod | awk '{print $2}')
+          echo "version=${VER:-1.22}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ steps.goversion.outputs.version }}
+          cache: true
+
+      - run: go mod download
+
+      - name: Check gofmt
+        run: |
+          FILES=$(gofmt -l .)
+          if [ -n "$FILES" ]; then
+            echo "The following files need gofmt:"
+            echo "$FILES"
+            exit 1
+          fi
+
+      - run: go test ./...
+
+  build:
+    name: Build ${{ matrix.goos }}/${{ matrix.goarch }}
+    needs: ci
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: darwin
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
+          - goos: windows
+            goarch: amd64
+          - goos: windows
+            goarch: arm64
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read Go version from go.mod
+        id: goversion
+        run: |
+          VER=$(grep '^go ' go.mod | awk '{print $2}')
+          echo "version=${VER:-1.22}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ steps.goversion.outputs.version }}
+          cache: true
+
+      - run: go mod download
+
+      - name: Resolve version tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "value=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build binary
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: '0'
+        run: |
+          BIN="${{ env.BINARY_NAME }}"
+          [ "${{ matrix.goos }}" = "windows" ] && BIN="${BIN}.exe"
+          go build -ldflags="-s -w" -o "${BIN}" .
+
+      - name: Package archive
+        id: archive
+        run: |
+          VERSION="${{ steps.tag.outputs.value }}"
+          BIN="${{ env.BINARY_NAME }}"
+          [ "${{ matrix.goos }}" = "windows" ] && BIN="${BIN}.exe"
+          ARCHIVE="${{ env.BINARY_NAME }}_${VERSION}_${{ matrix.goos }}_${{ matrix.goarch }}.tar.gz"
+          tar -czf "${ARCHIVE}" "${BIN}"
+          echo "name=${ARCHIVE}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bin-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: ${{ steps.archive.outputs.name }}
+          retention-days: 1
+
+  release:
+    name: GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Generate checksums.txt
+        run: |
+          cd dist
+          sha256sum *.tar.gz > checksums.txt
+
+      - name: Resolve version tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "value=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.value }}
+          files: dist/*
+          fail_on_unmatched_files: true

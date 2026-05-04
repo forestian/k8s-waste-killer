@@ -17,6 +17,23 @@ go mod tidy
 go build -o k8s-waste-killer .
 ```
 
+## Install from GitHub Releases
+
+Download a prebuilt binary from the [GitHub Releases](https://github.com/forestian/k8s-waste-killer/releases) page.
+
+**Linux / macOS**
+```bash
+tar -xzf k8s-waste-killer_<version>_linux_amd64.tar.gz
+chmod +x k8s-waste-killer
+./k8s-waste-killer --help
+```
+
+**Windows**
+```
+# Extract the archive and run:
+k8s-waste-killer.exe --help
+```
+
 ## Usage
 
 ```bash
